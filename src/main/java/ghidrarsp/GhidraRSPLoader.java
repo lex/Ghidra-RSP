@@ -24,7 +24,6 @@ import docking.widgets.filechooser.GhidraFileChooser;
 import ghidra.app.util.Option;
 import ghidra.app.util.OptionUtils;
 import ghidra.app.util.bin.ByteProvider;
-import ghidra.app.util.importer.MessageLog;
 import ghidra.app.util.opinion.AbstractProgramWrapperLoader;
 import ghidra.app.util.opinion.LoadSpec;
 import ghidra.framework.model.DomainObject;
@@ -34,7 +33,6 @@ import ghidra.program.model.listing.Program;
 import ghidra.program.model.util.CodeUnitInsertionException;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.DuplicateNameException;
-import ghidra.util.task.TaskMonitor;
 import ghidra.app.util.opinion.Loader;
 
 /**
@@ -59,8 +57,7 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
     }
 
     @Override
-    protected void load(ByteProvider provider, LoadSpec loadSpec, List<Option> options,
-    Program program, TaskMonitor monitor, MessageLog log)
+    protected void load(Program program, ImporterSettings settings)
     throws CancelledException, IOException {
 
         FlatProgramAPI api = new FlatProgramAPI(program);
@@ -91,8 +88,9 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
             break;
         }
 
-        boolean isBoot = OptionUtils.getBooleanOptionValue(OPTION_IS_BOOT, options, false);
+        boolean isBoot = OptionUtils.getBooleanOptionValue(OPTION_IS_BOOT, settings.options(), false);
 
+        ByteProvider provider = settings.provider();
         byte[] imem = provider.readBytes(0, provider.length());
         try {
             int textBase = isBoot ? 0x1000 : 0x1080;
@@ -115,9 +113,9 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
 
     @Override
     public List<Option> getDefaultOptions(ByteProvider provider, LoadSpec loadSpec,
-    DomainObject domainObject, boolean isLoadIntoProgram) {
+    DomainObject domainObject, boolean isLoadIntoProgram, boolean mirrorFsLayout) {
         List<Option> list =
-        super.getDefaultOptions(provider, loadSpec, domainObject, isLoadIntoProgram);
+        super.getDefaultOptions(provider, loadSpec, domainObject, isLoadIntoProgram, mirrorFsLayout);
 
         list.add(new Option(OPTION_IS_BOOT, false, Boolean.class, Loader.COMMAND_LINE_ARG_PREFIX + "-isBoot"));
 

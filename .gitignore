@@ -7,3 +7,4 @@ data/languages/*.sla
 /.settings
 /dist
 /.gradle
+/build
