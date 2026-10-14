@@ -9,7 +9,16 @@ A Nintendo 64 RSP processor module and loader for [Ghidra](https://github.com/Na
 
 - In the loader options, you can decide whether to load the RSP binary as a boot microcode or main microcode. (This will just change the base address of the binary, 0x1000 or 0x1080 respectively for boot or main microcode).
 
-- After hitting the OK button, the loader will prompt for a path to load the content of DMEM from. (You can choose not to import any DMEM content by clicking the cancel button in the file prompt).
+- If the `DMEM File` option is left empty, after hitting the OK button the loader will prompt for a path to load the content of DMEM from. (You can choose not to import any DMEM content by clicking the cancel button in the file prompt).
+
+## Headless
+
+The loader works with `analyzeHeadless`. There is no file prompt in headless mode, so pass DMEM with `-loader-dmemFile` (omit it to import without DMEM content):
+
+```
+analyzeHeadless <project_dir> <project_name> -import ucode.bin -loader GhidraRSPLoader \
+    -loader-dmemFile ucode_data.bin -loader-isBoot false
+```
 
 # Installation
 

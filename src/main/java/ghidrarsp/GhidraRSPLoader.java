@@ -17,7 +17,7 @@ package ghidrarsp;
 
 import java.io.IOException;
 import java.util.*;
-import java.io.FileInputStream;
+import java.nio.file.Files;
 import java.io.File;
 
 import docking.widgets.filechooser.GhidraFileChooser;
@@ -32,6 +32,7 @@ import ghidra.program.model.lang.LanguageCompilerSpecPair;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.util.CodeUnitInsertionException;
 import ghidra.util.exception.CancelledException;
+import ghidra.util.SystemUtilities;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.app.util.opinion.Loader;
 
@@ -41,6 +42,8 @@ import ghidra.app.util.opinion.Loader;
 public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
 
     private static String OPTION_IS_BOOT = "Is Boot";
+    private static String OPTION_DMEM_FILE = "DMEM File";
+    private static int DMEM_SIZE = 0x1000;
 
     @Override
     public String getName() {
@@ -62,30 +65,22 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
 
         FlatProgramAPI api = new FlatProgramAPI(program);
 
+        File dmemFile = getDmemFile(settings.options());
         int dmemEnd = 0;
-        while (true)
-        {
-            GhidraFileChooser chooser = new GhidraFileChooser(null);
-            chooser.setTitle("Choose a ucode rodata file (the content of DMEM)");
-            File f = chooser.getSelectedFile();
-            if (f == null)
-                break;
+        if (dmemFile != null) {
+            // validateOptions() is not called for headless imports, so check again here
+            String error = checkDmemFile(dmemFile);
+            if (error != null)
+                throw new IOException(error);
 
-            if (!f.exists() || f.isDirectory())
-                continue;
-
-            byte[] bytes = new byte[(int)f.length()];
+            byte[] bytes = Files.readAllBytes(dmemFile.toPath());
             dmemEnd = bytes.length;
-            var fileReader = new FileInputStream(f.getPath());
-            fileReader.read(bytes);
-            fileReader.close();
             try {
                 api.createMemoryBlock("dmem", api.toAddr(0), bytes,false).setPermissions(true, true, false);
             } catch (Exception e) {
                 e.printStackTrace();
                 throw new CancelledException();
             }
-            break;
         }
 
         boolean isBoot = OptionUtils.getBooleanOptionValue(OPTION_IS_BOOT, settings.options(), false);
@@ -96,7 +91,8 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
             int textBase = isBoot ? 0x1000 : 0x1080;
             api.createMemoryBlock("imem", api.toAddr(textBase), imem, false).setPermissions(true, false, true);
             api.addEntryPoint(api.toAddr(textBase));
-            program.getMemory().createUninitializedBlock("dmem.uninit", api.toAddr(dmemEnd), 0x1000 - dmemEnd, false).setPermissions(true, true, false);
+            if (dmemEnd < DMEM_SIZE)
+                program.getMemory().createUninitializedBlock("dmem.uninit", api.toAddr(dmemEnd), DMEM_SIZE - dmemEnd, false).setPermissions(true, true, false);
         } catch (Exception e) {
             e.printStackTrace();
             throw new CancelledException();
@@ -111,6 +107,40 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
 
     }
 
+    /**
+     * Returns the DMEM file from the "DMEM File" option, or asks for one with a file chooser
+     * when the option is empty. In headless mode there is no chooser, so DMEM is left empty.
+     */
+    private File getDmemFile(List<Option> options) {
+        String path = OptionUtils.getOption(OPTION_DMEM_FILE, options, "");
+        if (!path.isEmpty())
+            return new File(path);
+
+        if (SystemUtilities.isInHeadlessMode())
+            return null;
+
+        while (true)
+        {
+            GhidraFileChooser chooser = new GhidraFileChooser(null);
+            chooser.setTitle("Choose a ucode rodata file (the content of DMEM)");
+            File f = chooser.getSelectedFile();
+            if (f == null)
+                return null;
+
+            if (checkDmemFile(f) == null)
+                return f;
+        }
+    }
+
+    /** Returns an error message if the file can't be used as DMEM, or null if it can. */
+    private static String checkDmemFile(File f) {
+        if (!f.isFile())
+            return "DMEM file not found: " + f;
+        if (f.length() > DMEM_SIZE)
+            return "DMEM file is larger than 0x1000 bytes: " + f;
+        return null;
+    }
+
     @Override
     public List<Option> getDefaultOptions(ByteProvider provider, LoadSpec loadSpec,
     DomainObject domainObject, boolean isLoadIntoProgram, boolean mirrorFsLayout) {
@@ -118,15 +148,19 @@ public class GhidraRSPLoader extends AbstractProgramWrapperLoader {
         super.getDefaultOptions(provider, loadSpec, domainObject, isLoadIntoProgram, mirrorFsLayout);
 
         list.add(new Option(OPTION_IS_BOOT, false, Boolean.class, Loader.COMMAND_LINE_ARG_PREFIX + "-isBoot"));
+        list.add(new Option(OPTION_DMEM_FILE, "", String.class, Loader.COMMAND_LINE_ARG_PREFIX + "-dmemFile"));
 
         return list;
     }
 
     @Override
     public String validateOptions(ByteProvider provider, LoadSpec loadSpec, List<Option> options, Program program) {
-
-        // TODO: If this loader has custom options, validate them here.  Not all options require
-        // validation.
+        String path = OptionUtils.getOption(OPTION_DMEM_FILE, options, "");
+        if (!path.isEmpty()) {
+            String error = checkDmemFile(new File(path));
+            if (error != null)
+                return error;
+        }
 
         return super.validateOptions(provider, loadSpec, options, program);
     }
