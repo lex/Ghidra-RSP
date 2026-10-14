@@ -16,3 +16,15 @@ A Nintendo 64 RSP processor module and loader for [Ghidra](https://github.com/Na
 - Open Ghidra
 - File-> Install Extensions
 - Import zip file from the release section
+
+# Compatibility
+
+Supports Ghidra 12.0 and newer (requires Java 21). Ghidra 12 changed the loader API, so builds for Ghidra 10.x/11.x are only available from older releases.
+
+# Building
+
+```
+$GHIDRA_INSTALL_DIR/support/gradle/gradlew -PGHIDRA_INSTALL_DIR=$GHIDRA_INSTALL_DIR
+```
+
+The extension zip is written to `dist/`.
